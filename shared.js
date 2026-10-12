@@ -9,9 +9,13 @@ const GVL = {
     ['failed', 'Call failed'],
     ['wrong_number', 'Wrong number'],
     ['missed', 'Missed (incoming)'],
+    ['cancelled', 'Cancelled by agent'],
     ['do_not_call', 'Do not call'],
     ['other', 'Other']
   ],
+  // Agents can pick any result except the ones only the extension can observe.
+  AGENT_CHOICES: ['answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'failed', 'wrong_number', 'missed', 'do_not_call', 'other'],
+  endedLabel(by) { return by === 'agent' ? 'Agent hung up' : by === 'remote' ? 'Other side / line ended' : ''; },
   DEFAULT_SETTINGS: { voicemailMaxSec: CFG.VOICEMAIL_MAX_SEC, toastSec: CFG.TOAST_SEC, promptEnabled: true },
   state: { call: null },
   actions: { endCall() { return false; }, debug() { return ''; } },

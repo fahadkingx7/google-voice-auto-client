@@ -219,9 +219,9 @@
 
   GVL.hooks.onCallRecorded = rec => {
     if (!rec.leadId) return false;
-    setD({ phase: 'wrapup', since: Date.now(), lastRec: { id: rec.id, disposition: rec.disposition, durationSec: rec.durationSec, auto: true } }).then(render);
+    setD({ phase: 'wrapup', since: Date.now(), lastRec: { id: rec.id, disposition: rec.disposition, durationSec: rec.durationSec, endedBy: rec.endedBy, auto: true } }).then(render);
     (async () => {
-      const done = await bg({ type: 'leadDone', id: rec.leadId });
+      const done = rec.leadId === 'adhoc' ? { ok: true } : await bg({ type: 'leadDone', id: rec.leadId });
       if (!done.ok) {
         await setD({ mode: 'paused', msg: "Couldn't update your list (" + (done.error || 'offline') + '). Check your connection, then press Dial next.' });
         return render();
@@ -236,7 +236,7 @@
     const id = D.lastRec?.id;
     if (!id) return;
     await GVL.updateCall(id, { disposition: k, dispositionSource: 'agent', ...(note ? { notes: note } : {}) });
-    await setD({ lastRec: { ...D.lastRec, disposition: k, auto: false } });
+    await setD({ lastRec: { ...D.lastRec, disposition: k, auto: false, edit: false } });
     if (D.mode === 'running' && mine()) { cancelCountdown(); dialNext(); } else render();
   }
 
@@ -244,7 +244,7 @@
   const COLORS = {
     answered: ['#0f5132', '#d1e7dd'], voicemail: ['#5925dc', '#e5dcfb'], no_answer: ['#495057', '#e9ecef'],
     busy: ['#664d03', '#fff3cd'], dead_number: ['#842029', '#f8d7da'], wrong_number: ['#984c0c', '#ffe5d0'],
-    do_not_call: ['#58151c', '#f5c2c7'], other: ['#343a40', '#f1f3f5']
+    do_not_call: ['#58151c', '#f5c2c7'], other: ['#343a40', '#f1f3f5'], cancelled: ['#495057', '#e9ecef']
   };
   const GRID = ['answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'wrong_number', 'do_not_call', 'other'];
 
@@ -289,6 +289,7 @@
     .btn.green:hover:not(:disabled) { background: #bcdccd; }
     .btn.danger { background: #f8d7da; border-color: #f1aeb5; color: #842029; }
     .btn.danger:hover:not(:disabled) { background: #f1c2c7; }
+    .saved { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: #d1e7dd; color: #0f5132; font-weight: 600; font-size: 13.5px; }
     .tiny { display: block; margin: 10px auto 0; border: none; background: none; color: #adb5bd; font-size: 11.5px; cursor: pointer; }
     .tiny:hover { color: #6c757d; text-decoration: underline; }
     .link { display: block; margin: 12px auto 0; border: none; background: none; color: #6c757d; font-size: 13px; cursor: pointer; text-decoration: underline; }
@@ -389,8 +390,14 @@
       bar = h('div', { class: 'cd' }, i);
       requestAnimationFrame(() => requestAnimationFrame(() => { i.style.width = '0%'; }));
     }
+    if (rec.auto === false && !rec.edit) { // the agent already chose: collapse the panel
+      return [h('div', { class: 'saved' }, '✓ Saved as ' + GVL.label(rec.disposition) + '  ',
+        h('button', { class: 'tiny', style: 'display:inline;margin:0 0 0 6px', onclick: async () => { await setD({ lastRec: { ...D.lastRec, edit: true } }); render(); } }, 'Change'))];
+    }
+    const by = GVL.endedLabel(rec.endedBy);
     return [
-      h('div', { class: 'lbl' }, rec.auto ? 'How did it go? (auto-detected, tap to change)' : 'Result saved'),
+      by ? h('div', { class: 'hint', style: 'margin:10px 0 0;text-align:left' }, '☎ ' + by + (rec.disposition === 'cancelled' ? ' before anyone answered' : '')) : null,
+      h('div', { class: 'lbl' }, rec.auto ? 'Auto-detected: ' + GVL.label(rec.disposition) + '. Tap to change.' : 'Result saved'),
       grid, extra, noteIn, bar,
       countdown ? h('div', { class: 'hint' }, 'Next call starts automatically. Hover here to hold.') : null
     ];

@@ -92,6 +92,7 @@ h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
 .d-dead_number, .d-failed { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
 .d-wrong_number { background: #ffe5d0; color: #984c0c; border-color: #fecba1; }
 .d-do_not_call { background: #f5c2c7; color: #58151c; border-color: #ea868f; }
+.d-cancelled { background: #e9ecef; color: #6c757d; border-color: #ced4da; }
 .d-other { background: #e9ecef; color: #343a40; border-color: #ced4da; }
 
 /* status bar */

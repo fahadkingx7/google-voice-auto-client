@@ -35,10 +35,27 @@
     return null;
   }
 
+  function isEndButton(b) {
+    if (!b || !b.matches) return false;
+    if (b.matches(END_BTN)) return true;
+    const label = ['aria-label', 'title', 'data-tooltip', 'mattooltip'].map(a => b.getAttribute(a)).filter(Boolean).join(' ');
+    if (END_RE.test(label) || END_RE.test((b.textContent || '').trim())) return true;
+    const icon = b.querySelector('mat-icon,i,[class*="material"],[class*="icon"]');
+    return !!icon && icon.textContent.trim() === 'call_end';
+  }
+
+  // Remember WHO ended the call: any click on the end-call button during a call counts as the agent hanging up.
+  // A call that ends without that click was ended by the other side (or the line).
+  document.addEventListener('click', e => {
+    if (!call) return;
+    const b = e.target && e.target.closest ? e.target.closest('button,[role="button"]') : null;
+    if (isEndButton(b)) call.endedBy = 'agent';
+  }, true);
+
   // Lets the dialer's Hang up button end the call.
   GVL.actions.endCall = () => {
     const b = findEndButton();
-    if (b) { b.click(); return true; }
+    if (b) { if (call) call.endedBy = 'agent'; b.click(); return true; }
     return false;
   };
 
@@ -101,7 +118,7 @@
       const c = findContainer(btn);
       const text = (c?.innerText || '').trim();
       if (!call) {
-        call = { startedAt: Date.now(), talkMs: 0, texts: new Set(), number: null, label: '', incoming: false, leadId: null };
+        call = { startedAt: Date.now(), talkMs: 0, texts: new Set(), number: null, label: '', incoming: false, leadId: null, endedBy: null };
         GVL.state.call = call;
         call.leadId = GVL.hooks.onCallStart(call) || null;
         ping();
@@ -140,6 +157,7 @@
       if (DEAD_RE.test(all)) disposition = 'dead_number';
       else if (BUSY_RE.test(all) && !connected) disposition = 'busy';
       else if (FAIL_RE.test(all)) disposition = 'failed';
+      else if (!connected && c.endedBy === 'agent' && !c.incoming) disposition = 'cancelled'; // agent hung up before anyone answered
       else if (connected && (VM_RE.test(all) || durationSec <= settings.voicemailMaxSec)) disposition = c.incoming ? 'answered' : 'voicemail';
       else if (connected) disposition = 'answered';
       else disposition = c.incoming ? 'missed' : 'no_answer';
@@ -156,6 +174,7 @@
         autoDisposition: disposition,
         dispositionSource: 'auto',
         leadId: c.leadId || null,
+        endedBy: c.endedBy === 'agent' ? 'agent' : 'remote',
         notes: ''
       };
       await GVL.saveCall(rec);

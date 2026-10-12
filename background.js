@@ -72,7 +72,8 @@ function toRow(c, agentId) {
     disposition: c.disposition,
     disposition_source: c.dispositionSource || 'auto',
     notes: c.notes || '',
-    lead_id: c.leadId || null
+    lead_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.leadId || '') ? c.leadId : null,
+    ended_by: c.endedBy || null
   };
 }
 

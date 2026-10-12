@@ -25,7 +25,7 @@ function filtered() {
 function resultSelect(c) {
   const cls = k => 'form-select form-select-sm d-' + k;
   const sel = el('select', { className: cls(c.disposition) },
-    GVL.DISPOSITIONS.map(([k, n]) => el('option', { value: k, textContent: n, selected: k === c.disposition })));
+    GVL.DISPOSITIONS.filter(([k]) => GVL.AGENT_CHOICES.includes(k) || k === c.disposition).map(([k, n]) => el('option', { value: k, textContent: n, selected: k === c.disposition })));
   sel.onchange = () => {
     sel.className = cls(sel.value);
     GVL.updateCall(c.id, { disposition: sel.value, dispositionSource: 'agent' });
@@ -47,10 +47,10 @@ function renderStats(rows) {
 
 function renderCalls(rows) {
   const t = $('tbl');
-  t.replaceChildren(headRow('When', 'Number', 'Dir', 'Length', 'Result', 'Note', ''));
+  t.replaceChildren(headRow('', 'When', 'Number', 'Dir', 'Length', 'Result', 'Note', ''));
   const body = el('tbody');
   if (!rows.length) {
-    body.append(el('tr', {}, el('td', { colSpan: 7, className: 'empty',
+    body.append(el('tr', {}, el('td', { colSpan: 8, className: 'empty',
       textContent: calls.length ? 'No calls match your filters.' : 'No calls yet. Calls you make on Google Voice show up here automatically.' })));
   }
   for (const c of rows) {
@@ -58,12 +58,14 @@ function renderCalls(rows) {
     note.onchange = () => GVL.updateCall(c.id, { notes: note.value });
     const result = el('td', {}, resultSelect(c));
     if (c.dispositionSource === 'auto') result.append(el('span', { className: 'tag', textContent: 'auto', title: 'Auto-detected. Change it if it is wrong.' }));
+    const redial = el('button', { className: 'btn btn-outline btn-redial', textContent: 'Redial', title: 'Call this number again', onclick: () => redialLead({ id: c.leadId || 'adhoc', number: c.number, name: c.label || '', company: '', notes: '' }) });
     body.append(el('tr', {},
+      el('td', {}, redial),
       el('td', { className: 'nowrap', textContent: when(c) }),
       el('td', { className: 'nowrap' }, el('div', { textContent: c.number }),
         c.label && c.label !== c.number ? el('div', { className: 'sub', textContent: c.label }) : null),
       el('td', { className: 'sub', textContent: c.direction === 'incoming' ? '↙ in' : '↗ out' }),
-      el('td', { className: 'nowrap', textContent: GVL.fmtDur(c.durationSec) }),
+      el('td', { className: 'nowrap' }, el('div', { textContent: GVL.fmtDur(c.durationSec) }), c.endedBy ? el('div', { className: 'sub', textContent: c.endedBy === 'agent' ? 'you hung up' : 'they ended' }) : null),
       result,
       el('td', {}, note),
       el('td', { textContent: c.dirty ? '⏳' : '✓', title: c.dirty ? 'Waiting to upload' : 'Uploaded' })));
