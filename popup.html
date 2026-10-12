@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <section id="login" hidden>
+    <div class="login-card card">
+      <img id="logo2" class="biglogo" alt="TrucksMate">
+      <h1>Sign in</h1>
+      <p class="muted">Use the account your admin created for you.</p>
+      <label class="form-label" for="em">Email</label>
+      <input id="em" class="form-control" type="email" autocomplete="username" placeholder="you@company.com">
+      <label class="form-label" for="pw">Password</label>
+      <input id="pw" class="form-control" type="password" autocomplete="current-password" placeholder="Your password">
+      <button id="go" class="btn btn-primary w-100">Sign in</button>
+      <div id="err" class="alert alert-danger" hidden></div>
+    </div>
+  </section>
+
+  <section id="main" hidden>
+    <nav class="navbar">
+      <img id="logo" alt="TrucksMate">
+      <div class="nav">
+        <button id="tab-calls" class="active">My calls</button>
+        <button id="tab-numbers">By number</button>
+        <button id="tab-list">My list</button>
+      </div>
+      <div class="user"><span id="who"></span><button id="out" class="btn btn-outline btn-sm">Sign out</button></div>
+    </nav>
+
+    <div class="container">
+      <div id="queue" class="card queue" hidden></div>
+      <div id="stats" class="stats"></div>
+
+      <div id="bar-calls" class="toolbar">
+        <input id="q" class="form-control" placeholder="Search number, name or note">
+        <select id="f" class="form-select"></select>
+        <button id="csv" class="btn btn-outline">Export CSV</button>
+      </div>
+      <div id="bar-list" class="toolbar" hidden>
+        <input id="lq" class="form-control" placeholder="Search name, company or number">
+        <select id="lf" class="form-select"></select>
+        <button id="lrq" class="btn btn-outline" title="Put the numbers shown back in your auto-dial queue">Re-queue shown</button>
+      </div>
+      <div id="listmsg" class="alert alert-info" hidden></div>
+
+      <div class="card table-card"><div class="table-wrap"><table id="tbl" class="table"></table></div></div>
+    </div>
+
+    <div class="statusbar">
+      <span id="sync" class="badge"></span>
+      <button id="syncnow" class="btn btn-outline btn-sm">Sync now</button>
+    </div>
+  </section>
+
+  <script src="config.js"></script>
+  <script src="brand.js"></script>
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
