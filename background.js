@@ -86,13 +86,26 @@ async function sync() {
     if (!s) return;
     const dirty = (await GVL.getCalls()).filter(c => c.dirty);
     if (!dirty.length) return;
-    const r = await fetch(REST + '/calls?on_conflict=id', {
+    const post = rows => fetch(REST + '/calls?on_conflict=id', {
       method: 'POST',
       headers: { ...headers(s), Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(dirty.map(c => toRow(c, s.user.id)))
+      body: JSON.stringify(rows)
     });
+    let rows = dirty.map(c => toRow(c, s.user.id));
+    let r = await post(rows);
+    if (r.status === 400) {
+      // Most common cause: the database has not been upgraded yet (no ended_by column). Keep logging without it.
+      const body = await r.clone().text().catch(() => '');
+      if (/ended_by/i.test(body)) {
+        rows = rows.map(({ ended_by, ...rest }) => rest);
+        r = await post(rows);
+      }
+    }
     if (!r.ok) {
-      await chrome.storage.local.set({ syncError: `Upload failed (${r.status}). Will retry.` });
+      const body = (await r.text().catch(() => '')).slice(0, 160);
+      let msg = body;
+      try { const j = JSON.parse(body); msg = j.message || j.hint || body; } catch (e) { /* not JSON */ }
+      await chrome.storage.local.set({ syncError: `Upload failed (${r.status}): ${msg || 'unknown'}. Will retry.` });
       return;
     }
     const sent = new Map(dirty.map(c => [c.id, c.rev]));

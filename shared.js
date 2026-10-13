@@ -2,6 +2,8 @@
 const GVL = {
   DISPOSITIONS: [
     ['answered', 'Answered'],
+    ['interested', 'Interested'],
+    ['callback', 'Call back'],
     ['voicemail', 'Voicemail'],
     ['no_answer', 'No answer'],
     ['busy', 'Busy'],
@@ -14,7 +16,7 @@ const GVL = {
     ['other', 'Other']
   ],
   // Agents can pick any result except the ones only the extension can observe.
-  AGENT_CHOICES: ['answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'failed', 'wrong_number', 'missed', 'do_not_call', 'other'],
+  AGENT_CHOICES: ['answered', 'interested', 'callback', 'voicemail', 'no_answer', 'busy', 'dead_number', 'failed', 'wrong_number', 'missed', 'do_not_call', 'other'],
   endedLabel(by) { return by === 'agent' ? 'Agent hung up' : by === 'remote' ? 'Other side / line ended' : ''; },
   DEFAULT_SETTINGS: { voicemailMaxSec: CFG.VOICEMAIL_MAX_SEC, toastSec: CFG.TOAST_SEC, promptEnabled: true },
   state: { call: null },

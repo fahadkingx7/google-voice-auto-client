@@ -86,6 +86,8 @@ h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
 
 /* result colors (select pills + badges) */
 .d-answered { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
+.d-interested { background: #cfe2ff; color: #084298; border-color: #9ec5fe; }
+.d-callback { background: #fff3cd; color: #664d03; border-color: #ffe69c; }
 .d-voicemail { background: #e5dcfb; color: #5925dc; border-color: #cbb9f7; }
 .d-no_answer { background: #e9ecef; color: #495057; border-color: #ced4da; }
 .d-busy, .d-missed { background: #fff3cd; color: #664d03; border-color: #ffe69c; }
@@ -101,3 +103,10 @@ h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
 .badge.ok { background: #d1e7dd; color: #0f5132; }
 .badge.warn { background: #fff3cd; color: #664d03; }
 .badge.err { background: #f8d7da; color: #842029; }
+
+/* "developed by" credit: veefivee brand */
+:root { --vv-color: #393158; --vv-dot: #A66ADB; --vv-font: "Inter", sans-serif; }
+.vvfoot { text-align: center; padding: 10px 0 12px; border-top: 1px solid #eaecf0; margin-top: 4px; font-size: 12px; color: #6c757d; }
+.vvfoot a.vv { color: #6c757d; text-decoration: none; display: inline-flex; align-items: center; gap: 0; }
+.vvfoot a.vv b { color: var(--vv-color); font-family: var(--vv-font); font-weight: 860; font-size: 14px; letter-spacing: -0.045em; line-height: 1; }
+.vv-p { font-size: 14px; line-height: 1; display: inline-flex; margin: 0 1px 0 6px; }

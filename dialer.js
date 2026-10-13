@@ -21,7 +21,7 @@
     return t;
   })();
 
-  const DEFAULT = { mode: 'idle', phase: 'idle', lead: null, owner: null, since: 0, msg: '', lastRec: null, minimized: false, awaiting: false };
+  const DEFAULT = { auto: false, mode: 'idle', phase: 'idle', lead: null, owner: null, since: 0, msg: '', lastRec: null, minimized: false, awaiting: false };
   let D = { ...DEFAULT };
   let Q = { next: null, pending: 0, called: 0, loaded: false };
   let signedIn = false;
@@ -163,6 +163,19 @@
     else if (D.phase === 'wrapup') { startCountdown(); render(); }
     else render();
   }
+  async function setAuto(on) {
+    cancelCountdown();
+    if (on) await setD({ auto: true });
+    else await setD({ auto: false, mode: D.mode === 'idle' ? 'idle' : 'paused', msg: '' });
+    render();
+  }
+  function autoSwitch() {
+    const input = h('input', { type: 'checkbox', onchange: e => setAuto(e.target.checked) });
+    input.checked = !!D.auto;
+    return h('label', { class: 'sw', title: 'When on, the next number is dialed automatically after each call' },
+      input, h('span', { class: 'knob' }), h('span', { class: 'swt' }, 'Auto-dial'));
+  }
+
   async function pause() {
     cancelCountdown();
     await setD({ mode: 'paused', msg: '' });
@@ -242,11 +255,11 @@
 
   // ---------- widget ----------
   const COLORS = {
-    answered: ['#0f5132', '#d1e7dd'], voicemail: ['#5925dc', '#e5dcfb'], no_answer: ['#495057', '#e9ecef'],
+    answered: ['#0f5132', '#d1e7dd'], interested: ['#084298', '#cfe2ff'], callback: ['#664d03', '#fff3cd'], voicemail: ['#5925dc', '#e5dcfb'], no_answer: ['#495057', '#e9ecef'],
     busy: ['#664d03', '#fff3cd'], dead_number: ['#842029', '#f8d7da'], wrong_number: ['#984c0c', '#ffe5d0'],
     do_not_call: ['#58151c', '#f5c2c7'], other: ['#343a40', '#f1f3f5'], cancelled: ['#495057', '#e9ecef']
   };
-  const GRID = ['answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'wrong_number', 'do_not_call', 'other'];
+  const GRID = ['interested', 'callback', 'answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'wrong_number', 'do_not_call', 'other'];
 
   const CSS = `
     :host { all: initial; }
@@ -277,6 +290,17 @@
     .notes { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: #495057; margin: 8px 0; max-height: 64px; overflow: auto; }
     .alert { background: #fff3cd; border: 1px solid #ffe69c; color: #664d03; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin: 12px 0 0; }
     .hint { color: #6c757d; font-size: 12.5px; margin: 10px 0 0; text-align: center; }
+    .sw { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; cursor: pointer; font-size: 13px; font-weight: 600; color: #495057; }
+    .sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .sw .knob { position: relative; width: 38px; height: 22px; border-radius: 999px; background: #ced4da; transition: background .15s; flex: none; }
+    .sw .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+    .sw input:checked + .knob { background: #198754; }
+    .sw input:checked + .knob::after { transform: translateX(16px); }
+    .sw input:focus-visible + .knob { outline: 2px solid #3257F7; outline-offset: 2px; }
+    .vvfoot { text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #eef0f2; font-size: 11px; color: #8a949e; }
+    .vvfoot a.vv { color: #8a949e; text-decoration: none; display: inline-flex; align-items: center; gap: 0; }
+    .vvfoot a.vv b { color: #393158; font-family: Inter, -apple-system, "Segoe UI", sans-serif; font-weight: 860; font-size: 13px; letter-spacing: -0.045em; line-height: 1; }
+    .vv-p { font-size: 12px; line-height: 1; margin: 0 1px 0 5px; }
     .row { display: flex; gap: 8px; margin-top: 14px; }
     .btn { flex: 1; height: 40px; border-radius: 8px; border: 1px solid #dee2e6; background: #fff; color: #212529; font-weight: 500; font-size: 14px; cursor: pointer; transition: background .15s, box-shadow .15s; }
     .btn:hover:not(:disabled) { background: #f8f9fa; }
@@ -340,6 +364,7 @@
     if (D.phase === 'incall') return c ? (c.talkMs >= 1000 ? ['green', 'On call · ' + GVL.fmtDur(c.talkMs / 1000)] : ['amber', 'Ringing…']) : ['slate', 'Wrapping up…'];
     if (D.phase === 'wrapup') return ['blue', 'Call ended · ' + GVL.fmtDur(D.lastRec?.durationSec || 0)];
     if (!Q.next && Q.called > 0) return ['green', 'All done'];
+    if (!D.auto) return ['slate', 'Manual'];
     if (D.mode === 'paused') return ['amber', 'Paused'];
     if (D.mode === 'running') return ['green', 'Auto-dialing'];
     return ['slate', 'Ready'];
@@ -408,7 +433,8 @@
     const box = h('div');
     if (live()) box.append(h('div', { class: 'row' }, btn('danger', GVL.state.call ? 'Hang up' : 'Cancel dialing', hangUp)));
     const row = h('div', { class: 'row' });
-    if (D.mode === 'idle') row.append(btn('primary', '▶  Start dialing', startAuto, !Q.next || live()));
+    if (!D.auto) row.append(btn('primary', 'Dial next ›', dialNext, live() || !Q.next));
+    else if (D.mode === 'idle') row.append(btn('primary', '▶  Start dialing', startAuto, !Q.next || live()));
     else if (D.mode === 'running') row.append(btn('amber', '❚❚  Pause', pause));
     else row.append(
       btn('primary', 'Dial next ›', dialNext, live() || !Q.next),
@@ -435,6 +461,7 @@
       h('div', { class: 'main' },
         chipEl,
         h('span', { style: 'margin-left:8px;font-size:12px;color:#6c757d' }, `${Q.pending} left`),
+        autoSwitch(),
         D.msg ? h('div', { class: 'alert' }, D.msg) : null,
         showLead ? leadBlock(showLead) : (Q.loaded && !Q.next ? h('div', { class: 'hint', style: 'margin:16px 0' }, 'No numbers waiting right now.') : null),
         D.phase === 'wrapup' ? wrapupView() : null,
@@ -445,8 +472,9 @@
         otherTab ? h('div', { class: 'hint' }, 'Dialer is active in another Google Voice tab. Using a button here takes over.') : null,
         (D.phase === 'idle' || D.phase === 'wrapup') && Q.next && D.mode !== 'running' && !live()
           ? h('button', { class: 'link', onclick: skipNext }, 'Skip this number') : null,
-        D.mode === 'paused' && live() ? h('div', { class: 'hint' }, 'Paused. Auto-dial will wait after this call.') : null,
-        dbgBtn));
+        D.auto && D.mode === 'paused' && live() ? h('div', { class: 'hint' }, 'Paused. Auto-dial will wait after this call.') : null,
+        dbgBtn,
+        h('div', { class: 'vvfoot' }, h('a', { class: 'vv', href: 'https://veefivee.com', target: '_blank', rel: 'noopener' }, 'Developed by ', h('span', { class: 'vv-p' }, '🌴'), h('b', {}, 'veefivee')))));
     if (D.phase === 'wrapup') {
       card.addEventListener('mouseenter', () => { if (countdown) { cancelCountdown(); held = true; render(); } });
       card.addEventListener('mouseleave', () => {
