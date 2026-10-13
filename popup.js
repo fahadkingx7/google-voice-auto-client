@@ -170,16 +170,21 @@ function send(msg) {
 // "Your dial list" card: progress through the numbers the admin assigned.
 async function loadQueue() {
   const box = $('queue');
-  const r = await send({ type: 'queue' });
-  const d = r.ok && r.data;
-  if (!d || d.pending + d.called === 0) { box.hidden = true; return; }
-  const total = d.pending + d.called;
+  const open = el('button', { className: 'btn btn-primary btn-sm', textContent: 'Open Google Voice', onclick: () => chrome.tabs.create({ url: 'https://voice.google.com/' }) });
+  const refresh = el('button', { className: 'btn btn-outline btn-sm', textContent: '↻ Refresh', title: 'Check for new numbers' });
+  refresh.onclick = async () => { refresh.disabled = true; refresh.textContent = 'Checking…'; try { await send({ type: 'sync' }); await loadQueue(); } finally { refresh.disabled = false; refresh.textContent = '↻ Refresh'; } };
+  let d = null, err = '';
+  try { const r = await send({ type: 'queue' }); d = r.ok ? r.data : null; err = r.error || ''; } catch (e) { err = String(e.message || e); }
+  const total = d ? d.pending + d.called : 0;
+  // Always show the card, so the popup never looks empty and Open Google Voice is never missing.
+  const note = !d ? "Couldn't load your dial list" + (err ? ': ' + err : '.')
+    : total === 0 ? 'No leads yet. Your admin has not assigned any, or the list is disabled. Tap Refresh to check again.'
+    : `${d.called} of ${total} called · ${d.pending} to go`;
   box.replaceChildren(
     el('div', { className: 'q-row' },
-      el('div', {}, el('div', { className: 'q-title', textContent: 'Your dial list' }),
-        el('div', { className: 'muted', textContent: `${d.called} of ${total} called · ${d.pending} to go` })),
-      el('button', { className: 'btn btn-primary btn-sm', textContent: 'Open Google Voice', onclick: () => chrome.tabs.create({ url: 'https://voice.google.com/' }) })),
-    el('div', { className: 'progress' }, el('div', { className: 'progress-bar', style: `width:${Math.round(d.called / total * 100)}%` })));
+      el('div', {}, el('div', { className: 'q-title', textContent: 'Your dial list' }), el('div', { className: 'muted', textContent: note })),
+      el('div', { style: 'display:flex;gap:8px;flex:none' }, refresh, open)),
+    total ? el('div', { className: 'progress' }, el('div', { className: 'progress-bar', style: `width:${Math.round(d.called / total * 100)}%` })) : null);
   box.hidden = false;
 }
 

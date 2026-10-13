@@ -29,6 +29,8 @@
   let held = false;
   let host = null, shadow = null, body = null, chipEl = null;
 
+  const SHOW_AUTO = !!(typeof CFG !== 'undefined' && CFG.SHOW_AUTO_TOGGLE); // auto-dial switch hidden for now; set to true in config.js to bring it back
+  const autoOn = () => SHOW_AUTO && !!D.auto;
   const mine = () => D.owner === tabId;
   const live = () => !!GVL.state.call || D.phase === 'dialing' || D.phase === 'incall';
 
@@ -42,7 +44,8 @@
   });
   async function refreshQueue() {
     const r = await bg({ type: 'queue' });
-    if (r.ok) Q = { ...r.data, loaded: true };
+    if (r.ok) Q = { ...r.data, loaded: true, err: '' };
+    else Q = { ...Q, loaded: true, err: r.error || 'Could not reach the server.' };
     render();
     return r;
   }
@@ -170,6 +173,7 @@
     render();
   }
   function autoSwitch() {
+    if (!SHOW_AUTO) return null;
     const input = h('input', { type: 'checkbox', onchange: e => setAuto(e.target.checked) });
     input.checked = !!D.auto;
     return h('label', { class: 'sw', title: 'When on, the next number is dialed automatically after each call' },
@@ -299,8 +303,8 @@
     .sw input:focus-visible + .knob { outline: 2px solid #3257F7; outline-offset: 2px; }
     .vvfoot { text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #eef0f2; font-size: 11px; color: #8a949e; }
     .vvfoot a.vv { color: #8a949e; text-decoration: none; display: inline-flex; align-items: center; gap: 0; }
-    .vvfoot a.vv b { color: #393158; font-family: Inter, -apple-system, "Segoe UI", sans-serif; font-weight: 860; font-size: 13px; letter-spacing: -0.045em; line-height: 1; }
-    .vv-p { font-size: 12px; line-height: 1; margin: 0 1px 0 5px; }
+    .vvfoot a.vv b { color: #282340 !important; font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: -0.35px; line-height: 1; }
+    .vv-p { height: 15px; width: auto; margin: 0 1px 0 5px; }
     .row { display: flex; gap: 8px; margin-top: 14px; }
     .btn { flex: 1; height: 40px; border-radius: 8px; border: 1px solid #dee2e6; background: #fff; color: #212529; font-weight: 500; font-size: 14px; cursor: pointer; transition: background .15s, box-shadow .15s; }
     .btn:hover:not(:disabled) { background: #f8f9fa; }
@@ -364,7 +368,7 @@
     if (D.phase === 'incall') return c ? (c.talkMs >= 1000 ? ['green', 'On call · ' + GVL.fmtDur(c.talkMs / 1000)] : ['amber', 'Ringing…']) : ['slate', 'Wrapping up…'];
     if (D.phase === 'wrapup') return ['blue', 'Call ended · ' + GVL.fmtDur(D.lastRec?.durationSec || 0)];
     if (!Q.next && Q.called > 0) return ['green', 'All done'];
-    if (!D.auto) return ['slate', 'Manual'];
+    if (!autoOn()) return ['slate', 'Manual'];
     if (D.mode === 'paused') return ['amber', 'Paused'];
     if (D.mode === 'running') return ['green', 'Auto-dialing'];
     return ['slate', 'Ready'];
@@ -428,12 +432,21 @@
     ];
   }
 
+  async function manualRefresh(e) {
+    const b = e && e.currentTarget; if (b) { b.disabled = true; b.textContent = 'Checking…'; }
+    await refreshQueue();
+  }
   function actions() {
+    if (!Q.next && Q.pending + Q.called === 0 && D.phase === 'idle' && !live()) {
+      return h('div', {}, h('div', { class: 'hint', style: 'margin:14px 0 4px' },
+        Q.err ? "Couldn't load your list: " + Q.err : (Q.loaded ? 'No leads yet. Your admin has not assigned any, or the list is disabled.' : 'Loading your list…')),
+        h('div', { class: 'row' }, btn('primary', '↻ Refresh', manualRefresh)));
+    }
     if (!Q.next && Q.called > 0 && D.phase !== 'wrapup' && !live()) return h('div', { class: 'done' }, 'All numbers called. Great work!');
     const box = h('div');
     if (live()) box.append(h('div', { class: 'row' }, btn('danger', GVL.state.call ? 'Hang up' : 'Cancel dialing', hangUp)));
     const row = h('div', { class: 'row' });
-    if (!D.auto) row.append(btn('primary', 'Dial next ›', dialNext, live() || !Q.next));
+    if (!autoOn()) row.append(btn('primary', 'Dial next ›', dialNext, live() || !Q.next));
     else if (D.mode === 'idle') row.append(btn('primary', '▶  Start dialing', startAuto, !Q.next || live()));
     else if (D.mode === 'running') row.append(btn('amber', '❚❚  Pause', pause));
     else row.append(
@@ -472,9 +485,9 @@
         otherTab ? h('div', { class: 'hint' }, 'Dialer is active in another Google Voice tab. Using a button here takes over.') : null,
         (D.phase === 'idle' || D.phase === 'wrapup') && Q.next && D.mode !== 'running' && !live()
           ? h('button', { class: 'link', onclick: skipNext }, 'Skip this number') : null,
-        D.auto && D.mode === 'paused' && live() ? h('div', { class: 'hint' }, 'Paused. Auto-dial will wait after this call.') : null,
+        autoOn() && D.mode === 'paused' && live() ? h('div', { class: 'hint' }, 'Paused. Auto-dial will wait after this call.') : null,
         dbgBtn,
-        h('div', { class: 'vvfoot' }, h('a', { class: 'vv', href: 'https://veefivee.com', target: '_blank', rel: 'noopener' }, 'Developed by ', h('span', { class: 'vv-p' }, '🌴'), h('b', {}, 'veefivee')))));
+        h('div', { class: 'vvfoot' }, h('a', { class: 'vv', href: 'https://veefivee.com', target: '_blank', rel: 'noopener' }, 'Developed by ', h('img', { class: 'vv-p', src: BRAND.palm, alt: '' }), h('b', {}, 'veefivee')))));
     if (D.phase === 'wrapup') {
       card.addEventListener('mouseenter', () => { if (countdown) { cancelCountdown(); held = true; render(); } });
       card.addEventListener('mouseleave', () => {
@@ -493,7 +506,7 @@
 
   function render() {
     const hasQueue = Q.pending > 0 || Q.called > 0;
-    if (!signedIn || (!hasQueue && D.mode === 'idle' && D.phase === 'idle')) return removeWidget();
+    if (!signedIn) return removeWidget(); // otherwise always show the window, even with no leads (it offers Refresh)
     ensureWidget();
     const focused = shadow.activeElement;
     if (focused && focused.tagName === 'INPUT') return;
