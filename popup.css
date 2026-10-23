@@ -87,6 +87,7 @@ h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
 /* result colors (select pills + badges) */
 .d-answered { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
 .d-interested { background: #cfe2ff; color: #084298; border-color: #9ec5fe; }
+.d-not_interested { background: #fde2e1; color: #912018; border-color: #fbc6c3; }
 .d-callback { background: #fff3cd; color: #664d03; border-color: #ffe69c; }
 .d-voicemail { background: #e5dcfb; color: #5925dc; border-color: #cbb9f7; }
 .d-no_answer { background: #e9ecef; color: #495057; border-color: #ced4da; }

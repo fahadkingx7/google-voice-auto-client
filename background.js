@@ -120,6 +120,18 @@ async function sync() {
 }
 
 // ---- dialer queue ----
+// Leads may carry admin-chosen extra columns. Older databases don't have that column yet, so fall back without it.
+let extraOffUntil = 0; // if the database lacks the column, skip it for a minute, then try again (the admin may have just added it)
+async function leadsFetch(s, query) {
+  if (Date.now() >= extraOffUntil) {
+    const r = await fetch(`${REST}/leads?${query.replace('select=id,number,', 'select=id,number,extra,')}`, { headers: headers(s) });
+    if (r.status !== 400) return r;
+    const body = await r.clone().text().catch(() => '');
+    if (!/extra/i.test(body)) return r;
+    extraOffUntil = Date.now() + 60000;
+  }
+  return fetch(`${REST}/leads?${query}`, { headers: headers(s) });
+}
 async function countLeads(s, status) {
   const r = await fetch(`${REST}/leads?select=id,lead_lists!inner(enabled)&lead_lists.enabled=eq.true&agent_id=eq.${s.user.id}&status=eq.${status}`,
     { headers: { ...headers(s), Prefer: 'count=exact', Range: '0-0' } });
@@ -128,7 +140,7 @@ async function countLeads(s, status) {
 async function queueInfo() {
   const s = await getSession();
   if (!s) throw new Error('Not signed in');
-  const r = await fetch(`${REST}/leads?select=id,number,name,company,notes,lead_lists!inner(enabled)&lead_lists.enabled=eq.true&agent_id=eq.${s.user.id}&status=eq.pending&order=position.asc,id.asc&limit=1`, { headers: headers(s) });
+  const r = await leadsFetch(s, `select=id,number,name,company,notes,lead_lists!inner(enabled)&lead_lists.enabled=eq.true&agent_id=eq.${s.user.id}&status=eq.pending&order=position.asc,id.asc&limit=1`);
   if (!r.ok) throw new Error(`Queue request failed (${r.status})`);
   const next = (await r.json())[0] || null;
   const [pending, called] = await Promise.all([countLeads(s, 'pending'), countLeads(s, 'called')]);
@@ -150,7 +162,7 @@ async function myLeads() {
   if (!s) throw new Error('Not signed in');
   const out = [];
   for (let off = 0; off < 20000; off += 1000) {
-    const r = await fetch(`${REST}/leads?select=id,number,name,company,notes,status,attempts,last_disposition,last_call_at,position,lead_lists!inner(name,enabled)&lead_lists.enabled=eq.true&agent_id=eq.${s.user.id}&order=position.asc,id.asc&limit=1000&offset=${off}`, { headers: headers(s) });
+    const r = await leadsFetch(s, `select=id,number,name,company,notes,status,attempts,last_disposition,last_call_at,position,lead_lists!inner(name,enabled)&lead_lists.enabled=eq.true&agent_id=eq.${s.user.id}&order=position.asc,id.asc&limit=1000&offset=${off}`);
     if (!r.ok) throw new Error(`Could not load your list (${r.status})`);
     const rows = await r.json();
     out.push(...rows);

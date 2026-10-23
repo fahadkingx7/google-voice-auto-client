@@ -106,7 +106,7 @@ function renderList() {
   const rows = leads.filter(l => {
     if (f === '_new') { if (l.attempts > 0) return false; }
     else if (f && l.last_disposition !== f) return false;
-    return !q || [l.number, l.name, l.company].join(' ').toLowerCase().includes(q);
+    return !q || [l.number, l.name, l.company, ...(l.extra || []).map(e => e.v)].join(' ').toLowerCase().includes(q);
   });
   const n = d => leads.filter(l => l.last_disposition === d).length;
   const items = [
@@ -125,7 +125,8 @@ function renderList() {
   for (const l of rows.slice(0, 500)) {
     const redial = el('button', { className: 'btn btn-outline btn-redial', textContent: l.attempts ? 'Redial' : 'Call', onclick: () => redialLead(l) });
     body.append(el('tr', {},
-      el('td', {}, el('div', { textContent: l.name || l.company || '—' }), l.name && l.company ? el('div', { className: 'sub', textContent: l.company }) : null),
+      el('td', {}, el('div', { textContent: l.name || l.company || '—' }), l.name && l.company ? el('div', { className: 'sub', textContent: l.company }) : null,
+        Array.isArray(l.extra) && l.extra.length ? el('div', { className: 'sub', title: l.extra.map(e => e.l + ': ' + e.v).join('\n'), textContent: l.extra.slice(0, 3).map(e => e.l + ': ' + e.v).join(' · ') }) : null),
       el('td', { className: 'nowrap', textContent: l.number }),
       el('td', { className: 'nowrap', textContent: l.attempts || 0 }),
       el('td', {}, l.last_disposition ? el('span', { className: 'badge d-' + l.last_disposition, textContent: GVL.label(l.last_disposition) }) : el('span', { className: 'sub', textContent: 'not called' })),
@@ -198,7 +199,7 @@ async function loadLeads() {
   if (view === 'list') render();
 }
 async function redialLead(l) {
-  const lead = { id: l.id, number: l.number, name: l.name, company: l.company, notes: l.notes };
+  const lead = { id: l.id, number: l.number, name: l.name, company: l.company, notes: l.notes, extra: l.extra || [] };
   const tabs = await chrome.tabs.query({ url: 'https://voice.google.com/*' });
   if (tabs.length) {
     await chrome.tabs.update(tabs[0].id, { active: true });
@@ -214,7 +215,7 @@ async function redialLead(l) {
 async function requeueShown() {
   const q = $('lq').value.toLowerCase().trim(), f = $('lf').value;
   const rows = leads.filter(l => (f === '_new' ? l.attempts === 0 : (!f || l.last_disposition === f)) &&
-    (!q || [l.number, l.name, l.company].join(' ').toLowerCase().includes(q)) && l.status !== 'pending');
+    (!q || [l.number, l.name, l.company, ...(l.extra || []).map(e => e.v)].join(' ').toLowerCase().includes(q)) && l.status !== 'pending');
   if (!rows.length) return say('Everything shown is already in your queue.');
   if (!confirm(`Put ${rows.length} number(s) back in your auto-dial queue?`)) return;
   const r = await send({ type: 'requeue', ids: rows.map(l => l.id) });

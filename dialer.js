@@ -145,7 +145,7 @@
     if (live()) { await setD({ msg: 'Finish or hang up the current call first.' }); return render(); }
     cancelCountdown();
     await setD({ mode: 'paused', minimized: false });
-    await beginDial({ id: lead.id, number: lead.number, name: lead.name || '', company: lead.company || '', notes: lead.notes || '' });
+    await beginDial({ id: lead.id, number: lead.number, name: lead.name || '', company: lead.company || '', notes: lead.notes || '', extra: Array.isArray(lead.extra) ? lead.extra : [] });
   }
 
   async function beginDial(target) {
@@ -259,17 +259,17 @@
 
   // ---------- widget ----------
   const COLORS = {
-    answered: ['#0f5132', '#d1e7dd'], interested: ['#084298', '#cfe2ff'], callback: ['#664d03', '#fff3cd'], voicemail: ['#5925dc', '#e5dcfb'], no_answer: ['#495057', '#e9ecef'],
+    answered: ['#0f5132', '#d1e7dd'], interested: ['#084298', '#cfe2ff'], not_interested: ['#912018', '#fde2e1'], callback: ['#664d03', '#fff3cd'], voicemail: ['#5925dc', '#e5dcfb'], no_answer: ['#495057', '#e9ecef'],
     busy: ['#664d03', '#fff3cd'], dead_number: ['#842029', '#f8d7da'], wrong_number: ['#984c0c', '#ffe5d0'],
     do_not_call: ['#58151c', '#f5c2c7'], other: ['#343a40', '#f1f3f5'], cancelled: ['#495057', '#e9ecef']
   };
-  const GRID = ['interested', 'callback', 'answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'wrong_number', 'do_not_call', 'other'];
+  const GRID = ['interested', 'not_interested', 'callback', 'answered', 'voicemail', 'no_answer', 'busy', 'dead_number', 'wrong_number', 'do_not_call', 'other'];
 
   const CSS = `
     :host { all: initial; }
     * { box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
     .wrap { position: fixed; right: 18px; bottom: 18px; z-index: 2147483646; color: #212529; font-size: 14px; line-height: 1.45; }
-    .card { width: 360px; background: #fff; border: 1px solid #dee2e6; border-radius: 14px; box-shadow: 0 .75rem 2rem rgba(33,37,41,.22); overflow: hidden; }
+    .card { width: 380px; max-height: calc(100vh - 36px); display: flex; flex-direction: column; background: #fff; border: 1px solid #dee2e6; border-radius: 14px; box-shadow: 0 .75rem 2rem rgba(33,37,41,.22); overflow: hidden; }
     .head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fff; border-bottom: 1px solid #e9ecef; }
     .head img { height: 24px; display: block; }
     .head .t { font-weight: 600; font-size: 15px; }
@@ -279,18 +279,45 @@
     .iconbtn:hover { background: #f1f3f5; color: #212529; }
     .prog { height: 6px; background: #e9ecef; }
     .prog i { display: block; height: 100%; background: linear-gradient(90deg, #3257F7, #6d8bff); transition: width .4s; }
-    .main { padding: 16px; }
+    .main { padding: 18px 18px 16px; overflow: auto; }
     .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
     .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .chip.slate { background: #e9ecef; color: #495057; } .chip.blue { background: #eef2ff; color: #3257F7; }
     .chip.green { background: #d1e7dd; color: #0f5132; } .chip.amber { background: #fff3cd; color: #664d03; }
     .chip.amber::before, .chip.green::before { animation: pulse 1.2s infinite; }
     @keyframes pulse { 50% { opacity: .3; } }
-    .lead { display: flex; gap: 12px; align-items: center; margin: 12px 0 8px; padding: 12px; border: 1px solid #e9ecef; border-radius: 12px; background: #f8f9fa; }
-    .av { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px; background: linear-gradient(135deg, #3257F7, #7a5af8); }
-    .lead .n { font-size: 15px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 235px; }
-    .lead .c { color: #6c757d; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 235px; }
-    .lead .p { font-size: 15px; font-weight: 600; color: #3257F7; font-variant-numeric: tabular-nums; }
+    .lead { margin: 14px 0 10px; padding: 16px; border: 1px solid #e6e9f2; border-radius: 16px; background: linear-gradient(180deg, #f7f9ff 0%, #fff 100%); }
+    .lead-top { display: flex; gap: 14px; align-items: center; }
+    .av { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 17px; background: linear-gradient(135deg, #3257F7, #7a5af8); box-shadow: 0 4px 12px rgba(50,87,247,.25); }
+    .av.anon { background: #e9ecef; color: #6c757d; box-shadow: none; font-size: 20px; }
+    .who { min-width: 0; }
+    .lead .n { font-size: 17px; font-weight: 700; line-height: 1.25; color: #101828; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
+    .lead .c { color: #667085; font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ph { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 7px 12px 7px 8px; border-radius: 999px; background: #eef2ff; color: #2443d9; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .phi { width: 22px; height: 22px; border-radius: 50%; background: #3257F7; color: #fff; display: grid; place-items: center; font-size: 11px; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed #dfe3ec; }
+    .tile { min-width: 0; padding: 9px 11px; border-radius: 12px; background: #fff; border: 1px solid #eaecf0; }
+    .tile.wide { grid-column: 1 / -1; }
+    .tile.hl { background: #fffaeb; border-color: #fedf89; }
+    .tl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #98a2b3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tile.hl .tl { color: #b54708; }
+    .tile.missing { background: #f9fafb; border-style: dashed; } .tile.missing .tv { color: #98a2b3; font-weight: 500; font-style: italic; }
+    .none { color: #98a2b3 !important; font-style: italic; font-weight: 500 !important; }
+    .lmini { display: flex; gap: 10px; align-items: center; margin: 12px 0 0; padding: 10px 12px; border: 1px solid #eaecf0; border-radius: 12px; background: #f9fafb; }
+    .av.sm { width: 34px; height: 34px; font-size: 12.5px; box-shadow: none; }
+    .ln { font-size: 14px; font-weight: 700; color: #101828; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ls { font-size: 12px; color: #667085; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .outcome { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; font-size: 12.5px; }
+    .oc-l { color: #667085; font-weight: 600; }
+    .oc-v { font-weight: 700; padding: 3px 9px; border-radius: 999px; font-size: 12px; }
+    .oc-by { color: #667085; }
+    .tv { font-size: 14px; font-weight: 600; color: #101828; margin-top: 2px; overflow-wrap: anywhere; line-height: 1.3; }
+    .upnext { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px dashed #c7d2fe; background: #f8faff; display: flex; gap: 10px; align-items: center; }
+    .un-b { min-width: 0; flex: 1; }
+    .un-l { flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #fff; background: #3257F7; padding: 3px 7px; border-radius: 6px; }
+    .un-n { font-size: 13px; font-weight: 600; color: #344054; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .un-s { font-size: 12px; color: #667085; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .un-p { font-size: 15px; color: #101828; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
     .notes { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: #495057; margin: 8px 0; max-height: 64px; overflow: auto; }
     .alert { background: #fff3cd; border: 1px solid #ffe69c; color: #664d03; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin: 12px 0 0; }
     .hint { color: #6c757d; font-size: 12.5px; margin: 10px 0 0; text-align: center; }
@@ -306,7 +333,7 @@
     .vvfoot a.vv b { color: #282340 !important; font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: -0.35px; line-height: 1; }
     .vv-p { height: 15px; width: auto; margin: 0 1px 0 5px; }
     .row { display: flex; gap: 8px; margin-top: 14px; }
-    .btn { flex: 1; height: 40px; border-radius: 8px; border: 1px solid #dee2e6; background: #fff; color: #212529; font-weight: 500; font-size: 14px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+    .btn { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #dee2e6; background: #fff; color: #212529; font-weight: 500; font-size: 14px; cursor: pointer; transition: background .15s, box-shadow .15s; }
     .btn:hover:not(:disabled) { background: #f8f9fa; }
     .btn:disabled { opacity: .5; cursor: default; }
     .btn.primary { background: #3257F7; border-color: #3257F7; color: #fff; }
@@ -321,12 +348,12 @@
     .tiny { display: block; margin: 10px auto 0; border: none; background: none; color: #adb5bd; font-size: 11.5px; cursor: pointer; }
     .tiny:hover { color: #6c757d; text-decoration: underline; }
     .link { display: block; margin: 12px auto 0; border: none; background: none; color: #6c757d; font-size: 13px; cursor: pointer; text-decoration: underline; }
-    .lbl { font-size: 12px; font-weight: 600; color: #6c757d; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .dp { border: 1px solid transparent; border-radius: 8px; padding: 7px 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .lbl { font-size: 11px; font-weight: 700; color: #667085; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .dp { border: 1px solid transparent; border-radius: 8px; padding: 7px 4px; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1.2; min-height: 34px; }
     .dp.sel { border-color: currentColor; box-shadow: 0 0 0 3px rgba(33,37,41,.08); }
     .dp:hover { filter: brightness(.96); }
-    .note { width: 100%; margin-top: 8px; border: 1px solid #dee2e6; border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none; }
+    .note { width: 100%; margin-top: 8px; height: 36px; border: 1px solid #dee2e6; border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none; }
     .note:focus { border-color: #86a0fb; box-shadow: 0 0 0 .22rem rgba(50,87,247,.18); }
     .cd { height: 5px; background: #e9ecef; border-radius: 99px; overflow: hidden; margin-top: 12px; }
     .cd i { display: block; height: 100%; background: #3257F7; }
@@ -380,19 +407,52 @@
     chipEl.textContent = text;
   }
 
+  const fmtNum = n => { const m = String(n || '').match(/^\+1(\d{3})(\d{3})(\d{4})$/); return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : String(n || ''); };
+  const mcOf = lead => ((lead.extra || []).find(e => /^mc\b|mc ?(number|#|no)/i.test(e.l)) || {}).v || '';
+
+  const isMc = l => /^mc\b|mc ?(number|#|no)/i.test(l);
+  const mcClean = v => String(v || '').replace(/^mc[-\s#:]*/i, '');
+
+  // Full contact card (before / during a call)
   function leadBlock(lead) {
     if (!lead) return null;
-    const title = lead.name || lead.company || lead.number;
-    const initials = (lead.name || lead.company || '#').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const name = lead.name || '', co = lead.company || '', mc = mcOf(lead);
+    const initials = (name || co).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const extra = (Array.isArray(lead.extra) ? lead.extra : []).filter(e => e && e.v && !isMc(e.l));
+    const tile = (l, v, cls = '') => h('div', { class: 'tile ' + cls + (String(v).length > 20 ? ' wide' : '') }, h('div', { class: 'tl' }, l), h('div', { class: 'tv', title: v }, v));
     return [
       h('div', { class: 'lead' },
-        h('div', { class: 'av' }, initials || '#'),
-        h('div', {},
-          h('div', { class: 'n' }, title),
-          lead.name && lead.company ? h('div', { class: 'c' }, lead.company) : null,
-          h('div', { class: 'p' }, lead.number))),
+        h('div', { class: 'lead-top' },
+          h('div', { class: 'av' + (initials ? '' : ' anon') }, initials || '?'),
+          h('div', { class: 'who' },
+            h('div', { class: 'n' + (name ? '' : ' none'), title: name }, name || 'No name'),
+            h('div', { class: 'c' + (co ? '' : ' none'), title: co }, co || 'No company'))),
+        h('div', { class: 'ph' }, h('span', { class: 'phi' }, '☎'), fmtNum(lead.number)),
+        h('div', { class: 'tiles' },
+          mc ? tile('MC number', mc, 'hl') : tile('MC number', 'No MC number', 'missing'),
+          extra.map(e => tile(e.l, e.v)))),
       lead.notes ? h('div', { class: 'notes' }, lead.notes) : null
     ];
+  }
+
+  // One-line summary of the call that just ended, so the result buttons fit without scrolling
+  function leadMini(lead) {
+    if (!lead) return null;
+    const name = lead.name || lead.company || '', mc = mcOf(lead);
+    return h('div', { class: 'lmini' },
+      h('div', { class: 'av sm' + (name ? '' : ' anon') }, name ? name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() : '?'),
+      h('div', { class: 'who' },
+        h('div', { class: 'ln' + (name ? '' : ' none') }, name || 'No name'),
+        h('div', { class: 'ls' }, fmtNum(lead.number) + '  ·  ' + (mc ? 'MC ' + mcClean(mc) : 'No MC number'))));
+  }
+
+  function upNext(l) {
+    const mc = mcOf(l);
+    return h('div', { class: 'upnext' },
+      h('div', { class: 'un-b' },
+        h('div', { class: 'un-p' }, fmtNum(l.number)),
+        h('div', { class: 'un-n' + (l.name ? '' : ' none') }, l.name || 'No name'),
+        h('div', { class: 'un-s' }, [l.company, mc ? 'MC ' + mcClean(mc) : 'No MC number'].filter(Boolean).join('  ·  '))));
   }
 
   function wrapupView() {
@@ -411,7 +471,6 @@
         onclick: () => setDisposition(k, noteIn.value.trim())
       }, (rec.disposition === k ? '✓ ' : '') + GVL.label(k));
     }));
-    const extra = GRID.includes(rec.disposition) ? null : h('div', { class: 'hint' }, 'Auto-detected: ' + GVL.label(rec.disposition));
     let bar = null;
     if (countdown) {
       const left = Math.max(0, countdown.endsAt - Date.now());
@@ -423,11 +482,14 @@
       return [h('div', { class: 'saved' }, '✓ Saved as ' + GVL.label(rec.disposition) + '  ',
         h('button', { class: 'tiny', style: 'display:inline;margin:0 0 0 6px', onclick: async () => { await setD({ lastRec: { ...D.lastRec, edit: true } }); render(); } }, 'Change'))];
     }
-    const by = GVL.endedLabel(rec.endedBy);
+    const by = rec.endedBy === 'agent' ? (rec.disposition === 'cancelled' ? 'You hung up before anyone answered' : 'You hung up') : rec.endedBy ? 'They ended the call' : '';
     return [
-      by ? h('div', { class: 'hint', style: 'margin:10px 0 0;text-align:left' }, '☎ ' + by + (rec.disposition === 'cancelled' ? ' before anyone answered' : '')) : null,
-      h('div', { class: 'lbl' }, rec.auto ? 'Auto-detected: ' + GVL.label(rec.disposition) + '. Tap to change.' : 'Result saved'),
-      grid, extra, noteIn, bar,
+      h('div', { class: 'outcome' },
+        h('span', { class: 'oc-l' }, rec.auto ? 'Detected' : 'Result'),
+        h('span', { class: 'oc-v', style: `color:${(COLORS[rec.disposition] || COLORS.other)[0]};background:${(COLORS[rec.disposition] || COLORS.other)[1]}` }, GVL.label(rec.disposition)),
+        by ? h('span', { class: 'oc-by' }, by) : null),
+      h('div', { class: 'lbl' }, 'How did it go?'),
+      grid, noteIn, bar,
       countdown ? h('div', { class: 'hint' }, 'Next call starts automatically. Hover here to hold.') : null
     ];
   }
@@ -463,8 +525,6 @@
     const [color, text] = chipInfo();
     chipEl = h('span', { class: 'chip ' + color }, text);
     const otherTab = D.mode !== 'idle' && D.owner && D.owner !== tabId;
-    const dbgBtn = h('button', { class: 'tiny' }, 'Copy debug info');
-    dbgBtn.addEventListener('click', () => copyDebug(dbgBtn));
     const card = h('div', { class: 'card' },
       h('div', { class: 'head' },
         h('img', { src: BRAND.icon, alt: '' }), h('span', { class: 't' }, 'Dialer'), h('span', { class: 'sp' }),
@@ -476,17 +536,16 @@
         h('span', { style: 'margin-left:8px;font-size:12px;color:#6c757d' }, `${Q.pending} left`),
         autoSwitch(),
         D.msg ? h('div', { class: 'alert' }, D.msg) : null,
-        showLead ? leadBlock(showLead) : (Q.loaded && !Q.next ? h('div', { class: 'hint', style: 'margin:16px 0' }, 'No numbers waiting right now.') : null),
+        showLead ? (D.phase === 'wrapup' ? leadMini(showLead) : leadBlock(showLead)) : (Q.loaded && !Q.next ? h('div', { class: 'hint', style: 'margin:16px 0' }, 'No numbers waiting right now.') : null),
         D.phase === 'wrapup' ? wrapupView() : null,
         D.phase === 'wrapup' && !Q.next && Q.called > 0 ? h('div', { class: 'next' }, 'That was the last number on your list. 🎉') : null,
         D.phase === 'wrapup' && Q.next && !countdown
-          ? h('div', { class: 'next' }, 'Up next: ', h('b', {}, Q.next.name || Q.next.number), Q.next.name ? ` · ${Q.next.number}` : '') : null,
+          ? upNext(Q.next) : null,
         actions(),
         otherTab ? h('div', { class: 'hint' }, 'Dialer is active in another Google Voice tab. Using a button here takes over.') : null,
         (D.phase === 'idle' || D.phase === 'wrapup') && Q.next && D.mode !== 'running' && !live()
           ? h('button', { class: 'link', onclick: skipNext }, 'Skip this number') : null,
         autoOn() && D.mode === 'paused' && live() ? h('div', { class: 'hint' }, 'Paused. Auto-dial will wait after this call.') : null,
-        dbgBtn,
         h('div', { class: 'vvfoot' }, h('a', { class: 'vv', href: 'https://veefivee.com', target: '_blank', rel: 'noopener' }, 'Developed by ', h('img', { class: 'vv-p', src: BRAND.palm, alt: '' }), h('b', {}, 'veefivee')))));
     if (D.phase === 'wrapup') {
       card.addEventListener('mouseenter', () => { if (countdown) { cancelCountdown(); held = true; render(); } });

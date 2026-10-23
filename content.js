@@ -107,9 +107,11 @@
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     return lines.find(l =>
       !/^\d{1,2}:\d{2}/.test(l) &&
-      !/calling|ringing|connecting|end call|mute|keypad|hold|incoming|add call/i.test(l) &&
+      !/calling|ringing|connecting|end call|mute|keypad|hold|incoming|add call|ongoing|on call|call ended|transfer|record/i.test(l) &&
+      !/^[a-z]+(_[a-z]+)+$/.test(l) && // material icon names like "call_end", "mic_off"
+      !/^[a-z_]+$/.test(l) &&
       !GVL.extractNumber(l)
-    ) || number || '';
+    ) || '';
   }
 
   function tick() {
@@ -165,7 +167,7 @@
       const rec = {
         id: GVL.uid(),
         number: (c.leadId && GVL.state.leadNumber) || c.number || 'unknown',
-        label: (c.leadId && GVL.state.leadLabel) || c.label || '',
+        label: c.leadId ? (GVL.state.leadLabel || '') : (c.label || ''), // dialer calls: only the lead's own name
         direction: c.incoming ? 'incoming' : 'outgoing',
         startedAt: c.startedAt,
         endedAt,
