@@ -80,10 +80,25 @@
   }
   const clickCall = () => clickMatching(l => CALL_LABEL_RE.test(l) || CALL_ROW_RE.test(l));
 
-  // Type the number into Google Voice's dial box and press Call, without leaving the page.
+  // Is any call showing in Google Voice right now (ours, ringing, or one on hold with a "Switch" button)?
+  // Dialing while one is up makes Google put the first call on hold and start a second one.
+  function holdVisible() {
+    try { return holdVisible2(); } catch (e) { return false; }
+  }
+  function holdVisible2() {
+    for (const b of document.querySelectorAll('button,[role="button"]')) {
+      if (!visible(b) || (b.closest && b.closest('#gvl-dialer'))) continue;
+      if (/^switch$/i.test((b.textContent || '').trim()) || /^switch/i.test(b.getAttribute('aria-label') || '')) return true;
+    }
+    return /\bon hold\b/i.test((document.querySelector('[role="main"]') || document.body).innerText || '');
+  }
+  const callUi = () => !!GVL.state.call || (GVL.actions.callActive ? GVL.actions.callActive() : false) || holdVisible();
+  async function waitFor(test, ms, stopped) { const end = Date.now() + ms * SCALE; while (Date.now() < end) { if (test() || stopped()) return test(); await sleep(200); } return test(); }
+
+  // Type the number into Google Voice's dial box and start the call ONCE, without leaving the page.
   async function dialInPage(number, since) {
     const stopped = () => D.phase !== 'dialing' || D.since !== since;
-    const started = () => !!GVL.state.call;
+    const started = () => callUi();
     if (!/\/calls/.test(location.pathname)) {
       const nav = [...document.querySelectorAll('a[href*="/calls"]')].find(visible);
       if (nav) { nav.click(); await sleep(1200); }
@@ -98,11 +113,11 @@
     await sleep(600);
     if (started() || stopped()) return started();
     pressEnter(field);
-    await sleep(1500);
-    for (let i = 0; i < 4 && !started() && !stopped(); i++) {
-      if (clickCall()) await sleep(1500); else await sleep(500);
-    }
-    return started();
+    // Google can take a few seconds to show the call. Wait for it instead of clicking again:
+    // a second click starts a second call and puts the first one on hold.
+    if (await waitFor(started, 4500, stopped) || stopped()) return started();
+    clickCall(); // Enter didn't start it: press the Call button exactly once
+    return waitFor(started, 9000, stopped);
   }
 
   // ---------- fallback: Google's dial link (reloads the page) ----------
@@ -117,7 +132,8 @@
       if (D.phase !== 'dialing' || D.since !== started) return clearInterval(iv);
       if (GVL.state.call) return clearInterval(iv);
       const age = Date.now() - started;
-      if (age > 3500 && clicks < 3 && Date.now() - lastClick > 4000 && clickCall()) { clicks++; lastClick = Date.now(); }
+      if (callUi()) return clearInterval(iv);
+      if (age > 4000 && clicks < 1 && clickCall()) { clicks++; lastClick = Date.now(); } // one click at most
       if (age > DIAL_TIMEOUT_MS) { clearInterval(iv); await dialFailed(); }
     }, 500);
   }
@@ -131,6 +147,7 @@
 
   async function dialNext() {
     if (GVL.state.call) return;
+    if (callUi()) { await setD({ msg: 'A call is still open or on hold in Google Voice. Hang it up (or end the held call) before dialing the next number.' }); return render(); }
     cancelCountdown();
     const r = await bg({ type: 'queue' });
     if (!r.ok) { await setD({ msg: 'Could not reach the server: ' + (r.error || 'offline?') }); return render(); }
@@ -142,7 +159,7 @@
   // Redial from "My list": dials exactly this number, then waits (no auto chain).
   async function dialLead(lead) {
     if (!signedIn || !lead || !lead.number) return;
-    if (live()) { await setD({ msg: 'Finish or hang up the current call first.' }); return render(); }
+    if (live() || callUi()) { await setD({ msg: 'Finish or hang up the current call first (including any call on hold).' }); return render(); }
     cancelCountdown();
     await setD({ mode: 'paused', minimized: false });
     await beginDial({ id: lead.id, number: lead.number, name: lead.name || '', company: lead.company || '', notes: lead.notes || '', extra: Array.isArray(lead.extra) ? lead.extra : [] });
@@ -153,8 +170,9 @@
     render();
     const since = D.since, lead = D.lead;
     const ok = await dialInPage(lead.number, since);
-    if (ok || GVL.state.call || D.phase !== 'dialing' || D.since !== since) return;
-    if (CFG.DIAL_FALLBACK_RELOAD !== false) { location.assign(dialUrl(lead.number)); return; }
+    if (ok || callUi() || D.phase !== 'dialing' || D.since !== since) return;
+    // Reloading with Google's dial link is off by default: if the first call did start late, it would place a second one.
+    if (CFG.DIAL_FALLBACK_RELOAD === true && !callUi()) { location.assign(dialUrl(lead.number)); return; }
     await dialFailed();
   }
 

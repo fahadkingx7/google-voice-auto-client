@@ -52,6 +52,9 @@
     if (isEndButton(b)) call.endedBy = 'agent';
   }, true);
 
+  // Lets the dialer check whether Google Voice shows an active call (so it never dials a second one on top).
+  GVL.actions.callActive = () => !!findEndButton();
+
   // Lets the dialer's Hang up button end the call.
   GVL.actions.endCall = () => {
     const b = findEndButton();

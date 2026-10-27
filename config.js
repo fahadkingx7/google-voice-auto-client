@@ -6,5 +6,5 @@ const CFG = {
   TOAST_SEC: 20,         // how long the post-call correction panel stays up
   SHOW_AUTO_TOGGLE: false, // set true to show the Auto-dial switch in the dialer
   AUTO_NEXT_SEC: 8,      // auto-dialer: seconds the result panel stays up before the next number dials (hover to hold)
-  DIAL_FALLBACK_RELOAD: true // if in-page dialing fails, fall back to Google's dial link (reloads the page)
+  DIAL_FALLBACK_RELOAD: false // true = if in-page dialing fails, retry with Google's dial link (reloads the page; can double-dial)
 };
