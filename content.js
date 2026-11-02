@@ -169,7 +169,7 @@
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     return lines.find(l =>
       !/^\d{1,2}:\d{2}/.test(l) &&
-      !/calling|ringing|connecting|end call|mute|keypad|hold|incoming|add call|ongoing|on call|call ended|transfer|record/i.test(l) &&
+      !/calling|ringing|connecting|end call|mute|keypad|hold|incoming|add call|ongoing|on call|call ended|call with|transfer|record/i.test(l) &&
       !/^[a-z]+(_[a-z]+)+$/.test(l) && // material icon names like "call_end", "mic_off"
       !/^[a-z_]+$/.test(l) &&
       !GVL.extractNumber(l)
@@ -185,6 +185,7 @@
         call = { startedAt: Date.now(), talkMs: 0, texts: new Set(), number: null, label: '', incoming: false, leadId: null, endedBy: null };
         GVL.state.call = call;
         call.leadId = GVL.hooks.onCallStart(call) || null;
+        recStart(call); // the recorder listens from the start but only records once a voice is heard
         ping();
       }
       if (call.texts.size < 40) call.texts.add(text.slice(0, 600));
@@ -194,8 +195,6 @@
       if (!call.label) call.label = guessLabel(text, call.number);
       const t = readTimerMs(c);
       if (t !== null && t >= 1000) call.talkMs = Math.max(call.talkMs, t);
-      // Google Voice only shows the call timer once someone (or voicemail) picks up: start recording then, not while it rings.
-      if (t !== null && !call.recKey) recStart(call);
     } else if (call) {
       const done = call;
       call = null;
@@ -248,7 +247,9 @@
       if (!GVL.hooks.onCallRecorded(rec)) showToast(rec);
       if (c.recData) {
         const data = await c.recData;
-        if (data && connected && durationSec >= (CFG.REC_MIN_SEC || 20)) recUpload(rec, data);
+        const SKIP = ['voicemail', 'no_answer', 'busy', 'failed', 'dead_number', 'cancelled', 'missed'];
+        if (data && data.picked && data.mix && connected && Math.round(data.ms / 1000) >= (CFG.REC_MIN_SEC || 20) && !SKIP.includes(disposition))
+          recUpload({ ...rec, durationSec: Math.round(data.ms / 1000) }, data);
       }
     }, 2500);
   }
