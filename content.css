@@ -20,3 +20,10 @@
   font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 .25rem .75rem rgba(220,53,69,.4);
 }
 #gvl-dialer ~ #gvl-root { right: 394px; }
+
+/* recording indicator */
+#gvl-rec { position:fixed; left:16px; bottom:16px; z-index:2147483646; display:flex; align-items:center; gap:8px; padding:8px 14px 8px 12px;
+  background:#fff; border:1px solid #fecdca; border-radius:999px; box-shadow:0 6px 18px rgba(16,24,40,.12); font:600 13px/1.2 Inter,system-ui,sans-serif; color:#b42318; }
+#gvl-rec i { width:10px; height:10px; border-radius:50%; background:#f04438; animation:gvlrec 1.2s ease-in-out infinite; }
+#gvl-rec small { font-weight:500; color:#667085; }
+@keyframes gvlrec { 50% { opacity:.25; } }

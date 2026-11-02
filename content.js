@@ -81,6 +81,65 @@
   const settings = { ...GVL.DEFAULT_SETTINGS };
   let call = null;
 
+  // ---- call recording (recorder.js does the recording inside the page; this side uploads it) ----
+  const REC_ON = typeof CFG !== 'undefined' && CFG.REC_ENABLED && CFG.REC_URL;
+  const ORIGIN = 'https://voice.google.com';
+  const recWait = new Map(); // key -> resolve(data)
+  const broadcast = msg => {
+    const send = w => { try { w.postMessage(msg, ORIGIN); } catch (e) { /* other origin */ } try { for (let i = 0; i < w.frames.length; i++) send(w.frames[i]); } catch (e) { /* no access */ } };
+    send(window);
+  };
+  window.addEventListener('message', e => {
+    if (e.origin !== ORIGIN || !e.data) return;
+    if (e.data.__gvlRecState === 'recording' && call && call.recKey === e.data.key) recBadge(true);
+    if (e.data.__gvlRecData && recWait.has(e.data.key)) { recWait.get(e.data.key)(e.data); recWait.delete(e.data.key); }
+  });
+  function recStart(c) {
+    if (!REC_ON) return;
+    c.recKey = GVL.uid();
+    broadcast({ __gvlRec: 'start', key: c.recKey });
+  }
+  function recStop(c) {
+    recBadge(false);
+    if (!c.recKey) return null;
+    const p = new Promise(res => { recWait.set(c.recKey, res); setTimeout(() => { if (recWait.has(c.recKey)) { recWait.delete(c.recKey); res(null); } }, 6000); });
+    broadcast({ __gvlRec: 'stop', key: c.recKey });
+    return p;
+  }
+  function recBadge(on) {
+    let b = document.getElementById('gvl-rec');
+    if (!on) { b?.remove(); return; }
+    if (b) return;
+    b = document.createElement('div');
+    b.id = 'gvl-rec';
+    b.innerHTML = '<i></i><span>Recording</span><small>Say: \u201cThis call may be recorded.\u201d</small>';
+    document.body.appendChild(b);
+  }
+  const toB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
+  const msg = m => new Promise(res => { try { chrome.runtime.sendMessage(m, r => res(r || {})); } catch (e) { res({}); } });
+  async function recUpload(rec, data) {
+    try {
+      await msg({ type: 'sync' }); // make sure the call itself is saved first
+      const type = (data.mime || 'audio/webm').split(';')[0];
+      const fd = new FormData();
+      fd.append('mix', new Blob([data.mix], { type }), rec.id + '.webm');
+      if (data.found.agent) fd.append('agent64', await toB64(new Blob([data.agent], { type })));
+      if (data.found.caller) fd.append('caller64', await toB64(new Blob([data.caller], { type })));
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { token } = await msg({ type: 'token' });
+        if (!token) return;
+        for (const base of [CFG.REC_URL, CFG.REC_URL_BACKUP].filter(Boolean)) {
+          try {
+            const r = await fetch(`${base}/upload?call=${rec.id}&dur=${rec.durationSec}`, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd });
+            if (r.ok || (r.status >= 400 && r.status < 500)) return;
+            break; // the service answered with an error: wait and retry
+          } catch (e) { /* this address can't be reached: try the backup */ }
+        }
+        await new Promise(s => setTimeout(s, 15000 * (attempt + 1)));
+      }
+    } catch (e) { /* recording is best-effort; the call itself is already logged */ }
+  }
+
   const ping = () => {
     try {
       chrome.runtime.sendMessage({ type: 'heartbeat', onCall: !!call, number: call?.number || null }).catch(() => {});
@@ -135,11 +194,14 @@
       if (!call.label) call.label = guessLabel(text, call.number);
       const t = readTimerMs(c);
       if (t !== null && t >= 1000) call.talkMs = Math.max(call.talkMs, t);
+      // Google Voice only shows the call timer once someone (or voicemail) picks up: start recording then, not while it rings.
+      if (t !== null && !call.recKey) recStart(call);
     } else if (call) {
       const done = call;
       call = null;
       GVL.state.call = null;
       ping();
+      done.recData = recStop(done);
       finish(done);
     }
   }
@@ -184,6 +246,10 @@
       };
       await GVL.saveCall(rec);
       if (!GVL.hooks.onCallRecorded(rec)) showToast(rec);
+      if (c.recData) {
+        const data = await c.recData;
+        if (data && connected && durationSec >= (CFG.REC_MIN_SEC || 20)) recUpload(rec, data);
+      }
     }, 2500);
   }
 

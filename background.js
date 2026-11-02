@@ -224,6 +224,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
       else if (msg.type === 'leadDone') { await leadUpdate(msg.id, 'called'); send({ ok: true }); }
       else if (msg.type === 'leadSkip') { await leadUpdate(msg.id, 'skipped'); send({ ok: true }); }
       else if (msg.type === 'sync') { await sync(); send({ ok: true }); }
+      else if (msg.type === 'token') { const s = await getSession(); send({ ok: !!s, token: s && s.access_token }); }
       else send({ ok: false });
     } catch (e) {
       send({ ok: false, error: e instanceof TypeError ? NETWORK_HELP : (e.message || String(e)) });
