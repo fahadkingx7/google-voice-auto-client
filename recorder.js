@@ -58,7 +58,9 @@
     let ctx;
     try { ctx = new AudioContext(); } catch (e) { return; }
     const dest = () => { const d = ctx.createMediaStreamDestination(); d.channelCount = 1; return d; };
-    const out = { mix: dest(), agent: dest(), caller: dest() };
+    // One recording of both sides. Who is talking is worked out from the two volume levels below, so the call only
+    // needs to be transcribed once (half the cost of transcribing each side separately).
+    const out = { mix: dest() };
     // Everything reaches the recorders one second late, so starting them at "voice heard" still includes that second.
     const delay = {};
     for (const k of Object.keys(out)) { delay[k] = ctx.createDelay(PRE_ROLL + 0.5); delay[k].delayTime.value = PRE_ROLL; delay[k].connect(out[k]); }
@@ -68,7 +70,7 @@
     const ear = { caller: ctx.createAnalyser(), agent: ctx.createAnalyser() };
     for (const a of Object.values(ear)) { a.fftSize = 2048; a.smoothingTimeConstant = 0.2; }
     const fbuf = new Float32Array(1024), tbuf = new Float32Array(2048);
-    const recorders = {}, chunks = { mix: [], agent: [], caller: [] };
+    const recorders = {}, chunks = { mix: [] };
     const seen = new Set();
     const attach = () => {
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
@@ -80,7 +82,7 @@
           // Chrome only feeds a call's incoming audio to the recorder while it's attached to a (here: muted) audio element.
           if (side === 'caller') { const el = new Audio(); el.muted = true; el.srcObject = new MediaStream([t]); el.play().catch(() => {}); rec.els.push(el); }
           const src = ctx.createMediaStreamSource(new MediaStream([t]));
-          src.connect(delay.mix); src.connect(delay[side]); src.connect(ear[side]);
+          src.connect(delay.mix); src.connect(ear[side]);
           rec.found[side] = true;
         } catch (e) { /* track not usable */ }
       }
@@ -90,7 +92,7 @@
       rec.picked = true; rec.pickedAt = Date.now();
       for (const k of Object.keys(out)) {
         try {
-          const r = new MediaRecorder(out[k].stream, { mimeType: MIME, audioBitsPerSecond: k === 'mix' ? 32000 : 24000 });
+          const r = new MediaRecorder(out[k].stream, { mimeType: MIME, audioBitsPerSecond: 32000 });
           r.ondataavailable = e => { if (e.data && e.data.size) chunks[k].push(e.data); };
           r.start(1000);
           recorders[k] = r;
@@ -99,8 +101,13 @@
       tell({ __gvlRecState: 'recording', key });
     };
     let callerVoice = 0, agentVoice = 0;
+    const rms = an => { an.getFloatTimeDomainData(tbuf); let s2 = 0; for (let i = 0; i < tbuf.length; i++) s2 += tbuf[i] * tbuf[i]; return Math.sqrt(s2 / tbuf.length); };
     const listen = () => {
-      if (!rec || rec.picked) return;
+      if (!rec) return;
+      // volume of each side, ten times a second: tells the transcript who said what
+      rec.levels.push([Date.now(), rms(ear.agent), rms(ear.caller)]);
+      if (rec.levels.length > 40 && !rec.picked) rec.levels.splice(0, rec.levels.length - 40); // before pickup only the last few seconds matter
+      if (rec.picked) return;
       const c = voiceLevel(ear.caller, fbuf, tbuf);
       callerVoice = c.rms > 0.006 && !c.tonal ? callerVoice + 1 : 0;
       const g = voiceLevel(ear.agent, fbuf, tbuf);
@@ -108,7 +115,7 @@
       // the other side speaks for ~0.3 s, or (if they picked up silently) the agent talks for ~1.5 s after the line connected
       if (callerVoice >= 3 || (agentVoice >= 15 && Date.now() - rec.startedAt > 3000)) begin();
     };
-    rec = { key, ctx, recorders, chunks, found: { agent: false, caller: false }, picked: false, pickedAt: 0, startedAt: Date.now(), timer: null, ear: null, els: [] };
+    rec = { key, ctx, recorders, chunks, found: { agent: false, caller: false }, picked: false, pickedAt: 0, startedAt: Date.now(), timer: null, ear: null, els: [], levels: [] };
     attach();
     rec.timer = setInterval(attach, 500); // the call's audio appears a moment after the call starts
     rec.ear = setInterval(listen, 100);
@@ -126,7 +133,19 @@
     for (const el of r.els) { try { el.srcObject = null; } catch (e) { /* gone */ } }
     try { r.ctx.close(); } catch (e) { /* already closed */ }
     const blob = k => new Blob(r.chunks[k], { type: MIME.split(';')[0] });
-    return { key: r.key, found: r.found, picked: r.picked, ms: r.picked ? Date.now() - r.pickedAt : 0, mime: MIME, mix: blob('mix'), agent: blob('agent'), caller: blob('caller') };
+    // Volume timeline in recording time (the recording starts PRE_ROLL before the voice was heard), 0.2 s steps:
+    // [seconds, agent level, caller level] with levels as whole numbers (rms × 1000).
+    const levels = [];
+    if (r.picked) {
+      const base = r.pickedAt - PRE_ROLL * 1000, bins = new Map();
+      for (const [ts, a, c] of r.levels) {
+        if (ts < base) continue;
+        const k = Math.floor((ts - base) / 200);
+        const b = bins.get(k) || [0, 0, 0]; b[0] += a; b[1] += c; b[2]++; bins.set(k, b);
+      }
+      for (const [k, [a, c, n]] of [...bins].sort((x, y) => x[0] - y[0])) levels.push([+(k * 0.2).toFixed(1), Math.round(a / n * 1000), Math.round(c / n * 1000)]);
+    }
+    return { key: r.key, found: r.found, picked: r.picked, ms: r.picked ? Date.now() - r.pickedAt : 0, mime: MIME, mix: blob('mix'), levels };
   }
 
   const tell = msg => { try { window.top.postMessage(msg, ORIGIN); } catch (e) { /* top went away */ } };
@@ -139,8 +158,7 @@
       const out = await stopNow();
       if (!out || !(out.found.agent || out.found.caller)) return; // this frame never saw the call's audio
       if (!out.picked) { tell({ __gvlRecData: true, key, found: out.found, picked: false, ms: 0 }); return; } // nobody picked up: nothing recorded
-      const bufs = await Promise.all([out.mix, out.agent, out.caller].map(b => b.arrayBuffer()));
-      tell({ __gvlRecData: true, key, found: out.found, picked: true, ms: out.ms, mime: out.mime, mix: bufs[0], agent: bufs[1], caller: bufs[2] });
+      tell({ __gvlRecData: true, key, found: out.found, picked: true, ms: out.ms, mime: out.mime, mix: await out.mix.arrayBuffer(), levels: out.levels });
     }
   });
 })();

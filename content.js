@@ -123,8 +123,9 @@
       const type = (data.mime || 'audio/webm').split(';')[0];
       const fd = new FormData();
       fd.append('mix', new Blob([data.mix], { type }), rec.id + '.webm');
-      if (data.found.agent) fd.append('agent64', await toB64(new Blob([data.agent], { type })));
-      if (data.found.caller) fd.append('caller64', await toB64(new Blob([data.caller], { type })));
+      // a base64 copy for the transcriber (encoding here keeps the server's work tiny) + who-was-talking levels
+      fd.append('mix64', await toB64(new Blob([data.mix], { type })));
+      if (Array.isArray(data.levels) && data.levels.length) fd.append('levels', JSON.stringify(data.levels));
       for (let attempt = 0; attempt < 3; attempt++) {
         const { token } = await msg({ type: 'token' });
         if (!token) return;

@@ -95,6 +95,21 @@
   const callUi = () => !!GVL.state.call || (GVL.actions.callActive ? GVL.actions.callActive() : false) || holdVisible();
   async function waitFor(test, ms, stopped) { const end = Date.now() + ms * SCALE; while (Date.now() < end) { if (test() || stopped()) return test(); await sleep(200); } return test(); }
 
+  // Close anything Google has open on top of the page (account menu, menus, pop-ups).
+  // An open account menu eats the first click and keystroke, so the call never starts.
+  async function closePopups() {
+    let did = false;
+    for (const b of document.querySelectorAll('[aria-expanded="true"]')) {
+      const l = (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('href') || '');
+      if (/google account|accounts\.google|google apps/i.test(l)) { b.click(); did = true; }
+    }
+    for (const bd of document.querySelectorAll('.cdk-overlay-backdrop-showing')) { bd.click(); did = true; }
+    const esc = t => t && t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true }));
+    esc(document.activeElement); esc(document.body);
+    if (document.activeElement && document.activeElement.tagName === 'IFRAME') { document.activeElement.blur(); did = true; }
+    if (did) await sleep(400);
+  }
+
   // Type the number into Google Voice's dial box and start the call ONCE, without leaving the page.
   async function dialInPage(number, since) {
     const stopped = () => D.phase !== 'dialing' || D.since !== since;
@@ -103,6 +118,7 @@
       const nav = [...document.querySelectorAll('a[href*="/calls"]')].find(visible);
       if (nav) { nav.click(); await sleep(1200); }
     }
+    await closePopups();
     let field = findField();
     if (!field) {
       clickMatching(l => OPEN_DIALER_RE.test(l));
@@ -116,6 +132,7 @@
     // Google can take a few seconds to show the call. Wait for it instead of clicking again:
     // a second click starts a second call and puts the first one on hold.
     if (await waitFor(started, 4500, stopped) || stopped()) return started();
+    await closePopups();
     clickCall(); // Enter didn't start it: press the Call button exactly once
     return waitFor(started, 9000, stopped);
   }
